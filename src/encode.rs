@@ -295,7 +295,14 @@ impl PrivateKeyEncoding for RSAPrivateKey {
     fn to_pkcs8(&self) -> Result<Vec<u8>> {
         let version = ASN1Block::Integer(0, to_bigint(&BigUint::zero()));
         let oid = ASN1Block::ObjectIdentifier(0, rsa_oid());
-        let alg = ASN1Block::Sequence(0, vec![oid]);
+        // Include an explicit NULL parameter for AlgoritmIdentifier of
+        // PKCS#8 RSA keys. Although the correct encoding is to omit the
+        // NULL parameter, including it explicitly enhances interoperability
+        // with legacy implementations. It's important to note that both
+        // NULL and absent parameters MUST be accepted and considered equal
+        // by all implementations, so this is not a standard violation [1].
+        // [1] https://tools.ietf.org/html/rfc4055#section-2.1
+        let alg = ASN1Block::Sequence(0, vec![oid, ASN1Block::Null(0)]);
         let octet_string = ASN1Block::OctetString(0, self.to_pkcs1()?);
         let blocks = vec![version, alg, octet_string];
 
@@ -354,7 +361,7 @@ mod tests {
 
     #[test]
     fn priv_pem_encoding_pkcs8() {
-        const PKCS8_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMFICAQAwCwYJKoZIhvcNAQEBBEAwPgIBAAIJAJGyCM1NTAwDAgMBAAECCQCMDHwC\nEdIqAQIFAMEBAQECBQDBQAkDAgMDBAECBAHfV/cCBQC7RXbf\n-----END PRIVATE KEY-----\n";
+        const PKCS8_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMFQCAQAwDQYJKoZIhvcNAQEBBQAEQDA+AgEAAgkAkbIIzU1MDAMCAwEAAQIJAIwM\nfAIR0ioBAgUAwQEBAQIFAMFACQMCAwMEAQIEAd9X9wIFALtFdt8=\n-----END PRIVATE KEY-----\n";
         let mut rng = XorShiftRng::from_seed([1; 16]);
         let key = RSAPrivateKey::new(&mut rng, 64).expect("failed to generate key");
         let pem_str = key
@@ -438,7 +445,7 @@ mod tests {
 
     #[test]
     fn pem_encoding_config() {
-        const PKCS8_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\r\nMFICAQAwCwYJKoZIhvcNAQEBBEAwPgIBAAIJAJGyCM1NTAwDAgMBAAECCQCMDHwC\r\nEdIqAQIFAMEBAQECBQDBQAkDAgMDBAECBAHfV/cCBQC7RXbf\r\n-----END PRIVATE KEY-----\r\n";
+        const PKCS8_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\r\nMFQCAQAwDQYJKoZIhvcNAQEBBQAEQDA+AgEAAgkAkbIIzU1MDAMCAwEAAQIJAIwM\r\nfAIR0ioBAgUAwQEBAQIFAMFACQMCAwMEAQIEAd9X9wIFALtFdt8=\r\n-----END PRIVATE KEY-----\r\n";
         const PKCS8_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----\r\nMCIwCwYJKoZIhvcNAQEBAxMAMBACCQCRsgjNTUwMAwIDAQAB\r\n-----END PUBLIC KEY-----\r\n";
         let mut rng = XorShiftRng::from_seed([1; 16]);
         let key = RSAPrivateKey::new(&mut rng, 64).expect("failed to generate key");
